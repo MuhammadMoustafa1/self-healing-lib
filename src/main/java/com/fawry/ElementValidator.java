@@ -10,7 +10,7 @@ import java.time.Duration;
 import java.util.*;
 
 public class ElementValidator {
-    private static AppiumDriver driver;
+    public static AppiumDriver driver;
 
     public ElementValidator(AppiumDriver driver) {
         this.driver = driver;
@@ -26,7 +26,7 @@ public class ElementValidator {
         }
     }
 
-    private static boolean scrollToFindElement(By locator) {
+    public static boolean scrollToFindElement(By locator) {
         int maxScrolls = 5;
         for (int i = 0; i < maxScrolls; i++) {
             try {

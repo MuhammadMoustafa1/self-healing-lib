@@ -24,7 +24,7 @@ import java.util.Deque;
 import java.util.List;
 
 public class XmlGenerator{
-    private AppiumDriver driver;
+    public AppiumDriver driver;
     private static final String XML_OUTPUT_DIR = "xml_snapshots";
     private static final DateTimeFormatter FILE_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");

@@ -195,7 +195,7 @@ public class AIIntegrationService {
         );
     }
 
-    private List<String> extractXPathFromAIResponse(String response) {
+    public List<String> extractXPathFromAIResponse(String response) {
         String cleanedResponse = response.replaceAll("^```[a-zA-Z]*", "")
                 .replaceAll("```$", "")
                 .trim();
