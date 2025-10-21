@@ -6,7 +6,7 @@
 
     <groupId>com.fawry</groupId>
     <artifactId>self-healing-lib</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <packaging>jar</packaging>
 
     <name>self-healing-lib</name>
@@ -30,6 +30,7 @@
             <artifactId>json-simple</artifactId>
             <version>1.1.1</version>
         </dependency>
+
         <!-- HTTP client -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
@@ -102,5 +103,14 @@
             </plugin>
         </plugins>
     </build>
+
+    <!-- ✅ Add this block before </project> -->
+    <distributionManagement>
+        <repository>
+            <id>github</id>
+            <name>GitHub Packages</name>
+            <url>https://maven.pkg.github.com/MuhammadMoustafa1/self-healing-lib</url>
+        </repository>
+    </distributionManagement>
 
 </project>
