@@ -1,8 +1,8 @@
 package com.fawry;
-import com.fawry.AIIntegrationService;
-import com.fawry.XmlGenerator;
+
 import io.appium.java_client.AppiumDriver;
 import org.openqa.selenium.By;
+import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.PointerInput;
 import org.openqa.selenium.interactions.Sequence;
 
@@ -10,146 +10,140 @@ import java.time.Duration;
 import java.util.*;
 
 public class ElementValidator {
-    public static AppiumDriver driver;
+
+    public final AppiumDriver driver;
 
     public ElementValidator(AppiumDriver driver) {
         this.driver = driver;
     }
 
-    static boolean isPresent(By element) {
+    /**
+     * Check if an element is present and displayed on screen.
+     */
+    private boolean isElementPresent(By locator) {
         try {
-            return !driver.findElements(element).isEmpty();
+            List<WebElement> elements = driver.findElements(locator);
+            return !elements.isEmpty() && elements.get(0).isDisplayed();
         } catch (Exception e) {
-            System.out.println("Error occurred while checking presence of element: " + element);
-            e.printStackTrace();
+            System.out.println("[WARN] Failed to check element presence: " + locator);
             return false;
         }
     }
 
-    public static boolean scrollToFindElement(By locator) {
+    /**
+     * Try scrolling several times to locate an element.
+     */
+    private boolean scrollToFindElement(By locator) {
         int maxScrolls = 5;
         for (int i = 0; i < maxScrolls; i++) {
-            try {
-                if (isPresent(locator)) {
-                    return true;
-                }
-                swipeFromCenterWithDirection(SwipeDirection.Down);
-            } catch (Exception e) {
-                System.out.println("Scroll attempt " + (i + 1) + " failed for locator: " + locator);
-                e.printStackTrace();
-            }
+            if (isElementPresent(locator)) return true;
+            swipeFromCenterWithDirection(SwipeDirection.DOWN, 350);
         }
         return false;
     }
 
-    public static List<By> validateAndHealElements(List<By> originalElements) {
-        List<By> updatedElements = new ArrayList<>();
+    /**
+     * Main validation & healing workflow.
+     */
+    public List<By> validateAndHealElements(List<By> originalLocators) {
+        List<By> updatedLocators = new ArrayList<>(originalLocators);
         List<Integer> missingIndexes = new ArrayList<>();
         List<String> damagedXpaths = new ArrayList<>();
 
         try {
-            System.out.println("***** Validating Elements *****");
+            System.out.println("===== Element Validation Started =====");
 
             XmlGenerator xmlGenerator = new XmlGenerator();
-            AIIntegrationService aiService = new AIIntegrationService();
             xmlGenerator.setDriver(driver);
 
-            for (int i = 0; i < originalElements.size(); i++) {
-                By element = originalElements.get(i);
-                if (scrollToFindElement(element)) {
-                    System.out.println("Element found: " + element);
-                    updatedElements.add(element);
+            AIIntegrationService aiService = new AIIntegrationService();
+
+            // Step 1: Validate & detect missing elements
+            for (int i = 0; i < originalLocators.size(); i++) {
+                By locator = originalLocators.get(i);
+
+                if (isElementPresent(locator)) {
+                    System.out.println("[OK] Element found directly: " + locator);
+                } else if (scrollToFindElement(locator)) {
+                    System.out.println("[OK] Element found after scroll: " + locator);
                 } else {
-                    System.out.println("Element not found (even after scrolling): " + element);
+                    System.out.println("[MISSING] Element not found: " + locator);
                     missingIndexes.add(i);
-                    damagedXpaths.add(element.toString().replace("By.xpath: ", ""));
-                    updatedElements.add(null);
+                    damagedXpaths.add(locator.toString().replace("By.xpath: ", ""));
                 }
             }
 
+            // Step 2: If any missing → AI healing
             if (!missingIndexes.isEmpty()) {
-                System.out.println("Missing " + missingIndexes.size() + " elements, attempting AI self-healing...");
+                System.out.println("[AI] Healing " + missingIndexes.size() + " missing elements...");
                 xmlGenerator.generatePageXML();
+                List<String> healedXpaths = aiService.autoAnalyzeAndFix(damagedXpaths);
 
-                List<String> fixedXpaths = aiService.autoAnalyzeAndFix(damagedXpaths);
+                for (int j = 0; j < missingIndexes.size(); j++) {
+                    int idx = missingIndexes.get(j);
+                    String healed = healedXpaths != null && j < healedXpaths.size() ? healedXpaths.get(j) : null;
 
-                if (fixedXpaths != null && !fixedXpaths.isEmpty()) {
-                    for (int j = 0; j < missingIndexes.size(); j++) {
-                        int idx = missingIndexes.get(j);
-                        if (j < fixedXpaths.size() && fixedXpaths.get(j) != null && !fixedXpaths.get(j).isEmpty()) {
-                            updatedElements.set(idx, By.xpath(fixedXpaths.get(j).trim()));
-                            System.out.println("AI generated new XPath for index " + idx + ": " + fixedXpaths.get(j).trim());
-                        } else {
-                            updatedElements.set(idx, originalElements.get(idx));
-                            System.out.println("Fallback to original XPath for index " + idx);
-                        }
-                    }
-                } else {
-                    System.out.println("AI returned no xpaths. Falling back to originals.");
-                    for (int idx : missingIndexes) {
-                        updatedElements.set(idx, originalElements.get(idx));
+                    if (healed != null && !healed.isEmpty()) {
+                        updatedLocators.set(idx, By.xpath(healed.trim()));
+                        System.out.println("[AI] Fixed XPath at index " + idx + ": " + healed);
+                    } else {
+                        System.out.println("[FALLBACK] No AI fix; keeping original: " + originalLocators.get(idx));
                     }
                 }
             }
 
-            for (By element : updatedElements) {
-                if (element == null || !scrollToFindElement(element)) {
-                    System.out.println("Element still not found after AI healing: " + element);
-                    return Collections.emptyList();
+            // Step 3: Re-validate healed elements
+            for (By locator : updatedLocators) {
+                if (!isElementPresent(locator) && !scrollToFindElement(locator)) {
+                    System.out.println("[FAIL] Still not found after healing: " + locator);
                 }
             }
 
-            System.out.println("***** All Elements Validated *****");
-            return updatedElements;
+            System.out.println("===== Element Validation Completed =====");
+            return updatedLocators;
 
         } catch (Exception e) {
-            System.out.println("Error in validateAndHealElements");
+            System.out.println("[ERROR] Validation failed: " + e.getMessage());
             e.printStackTrace();
             return Collections.emptyList();
         }
     }
 
-    public static boolean swipeFromCenterWithDirection(SwipeDirection direction) {
-        return swipeFromCenterWithDirection(direction, 300);
-    }
-
-    public enum SwipeDirection {
-        Up,
-        Down,
-        Left,
-        Right
-    }
-    public static boolean swipeFromCenterWithDirection(SwipeDirection direction, int delta) {
+    /**
+     * Generic swipe helper.
+     */
+    private boolean swipeFromCenterWithDirection(SwipeDirection direction, int delta) {
         try {
-            int startX = driver.manage().window().getSize().width / 2;
-            int startY = driver.manage().window().getSize().height / 2;
+            int width = driver.manage().window().getSize().width;
+            int height = driver.manage().window().getSize().height;
+            int startX = width / 2;
+            int startY = height / 2;
             int endX = startX;
             int endY = startY;
+
             switch (direction) {
-                case Up:
-                    endY = startY - delta;
-                    break;
-                case Down:
-                    endY = startY + delta;
-                    break;
-                case Left:
-                    endX = startX - delta;
-                    break;
-                case Right:
-                    endX = startX + delta;
-                    break;
+                case UP:    endY = startY - delta; break;
+                case DOWN:  endY = startY + delta; break;
+                case LEFT:  endX = startX - delta; break;
+                case RIGHT: endX = startX + delta; break;
             }
+
             PointerInput finger = new PointerInput(PointerInput.Kind.TOUCH, "finger");
             Sequence swipe = new Sequence(finger, 1);
-            swipe.addAction(finger.createPointerMove(Duration.ofMillis(0), PointerInput.Origin.viewport(), startX, startY));
+            swipe.addAction(finger.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), startX, startY));
             swipe.addAction(finger.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
             swipe.addAction(finger.createPointerMove(Duration.ofMillis(500), PointerInput.Origin.viewport(), endX, endY));
             swipe.addAction(finger.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
+
             driver.perform(Collections.singletonList(swipe));
             return true;
         } catch (Exception e) {
-            System.out.println( "swipeFromCenterWithDirection");
+            System.out.println("[WARN] Swipe action failed: " + e.getMessage());
             return false;
         }
+    }
+
+    public enum SwipeDirection {
+        UP, DOWN, LEFT, RIGHT
     }
 }
