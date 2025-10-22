@@ -132,22 +132,26 @@ public class XmlGenerator {
         return xpathComment + writer.toString();
     }
 
-    private void saveXmlToFile(String xmlContent, List<String> xpaths) throws IOException {
+   private void saveXmlToFile(String xmlContent, List<String> xpaths) throws IOException {
         String timestamp = LocalDateTime.now().format(FILE_TIMESTAMP_FORMAT);
-        Path filePath = Paths.get("xml_snapshots/snapshot_" + timestamp + ".xml");
+        Path xmlPath = Paths.get(XML_OUTPUT_DIR, "snapshot_" + timestamp + ".xml");
+        Path xpathsPath = Paths.get(XML_OUTPUT_DIR, "xpaths_" + timestamp + ".txt");
 
-
-        try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
+        try (BufferedWriter writer = Files.newBufferedWriter(xmlPath)) {
             writer.write(xmlContent);
-            Log.info("Saved XML snapshot to: " + filePath.toAbsolutePath());
+            Log.info("Saved XML snapshot to: " + xmlPath.toAbsolutePath());
+        } catch (IOException e) {
+            Log.error("Failed to save XML snapshot: " + xmlPath, e);
+            throw e;
+        }
 
-            String xpathFilename = XML_OUTPUT_DIR + "/xpaths_" + timestamp + ".txt";
-            Path xpathFilePath = Paths.get(xpathFilename);
-            try (BufferedWriter xpathWriter = Files.newBufferedWriter(xpathFilePath)) {
-                xpathWriter.write("All XPaths found in XML (" + xpaths.size() + " total):\n");
-                xpathWriter.write(String.join("\n", xpaths));
-                Log.info("Saved XPaths to: " + xpathFilePath.toAbsolutePath());
-            }
+        try (BufferedWriter xpathWriter = Files.newBufferedWriter(xpathsPath)) {
+            xpathWriter.write("All XPaths found in XML (" + xpaths.size() + " total):\n");
+            xpathWriter.write(String.join("\n", xpaths));
+            Log.info("Saved XPaths to: " + xpathsPath.toAbsolutePath());
+        } catch (IOException e) {
+            Log.error("Failed to save XPaths file: " + xpathsPath, e);
+            throw e;
         }
     }
 
@@ -159,13 +163,12 @@ public class XmlGenerator {
                         try {
                             Files.delete(path);
                         } catch (IOException e) {
-                            System.err.println("Failed to delete file: " + path);
+                            Log.error("Failed to delete file: " + path, e);
                         }
                     });
             Log.info("Cleared xml_snapshots directory.");
         } catch (IOException e) {
-            System.err.println("Failed to clear xml_snapshots directory:");
-            e.printStackTrace();
+            Log.error("Failed to clear xml_snapshots directory.", e);
         }
     }
 }
