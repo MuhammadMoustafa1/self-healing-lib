@@ -110,6 +110,7 @@ public class By extends org.openqa.selenium.By {
             // Generate XML snapshot of the current page
             XmlGenerator xmlGenerator = new XmlGenerator();
             xmlGenerator.setDriver(driver);
+            xmlGenerator.clearXmlSnapshotsDirectory();
             xmlGenerator.generatePageXML();
 
             // Send locator to AI for analysis and repair

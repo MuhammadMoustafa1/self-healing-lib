@@ -1,5 +1,6 @@
 package com.fawry;
 
+import com.fawry.utilities.Log;
 import io.appium.java_client.AppiumDriver;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -23,7 +24,7 @@ import java.util.ArrayList;
 import java.util.Deque;
 import java.util.List;
 
-public class XmlGenerator{
+public class XmlGenerator {
     public AppiumDriver driver;
     private static final String XML_OUTPUT_DIR = "xml_snapshots";
     private static final DateTimeFormatter FILE_TIMESTAMP_FORMAT =
@@ -133,20 +134,38 @@ public class XmlGenerator{
 
     private void saveXmlToFile(String xmlContent, List<String> xpaths) throws IOException {
         String timestamp = LocalDateTime.now().format(FILE_TIMESTAMP_FORMAT);
-        String filename = XML_OUTPUT_DIR + "/snapshot_" + timestamp + ".xml";
-        Path filePath = Paths.get(filename);
+        Path filePath = Paths.get("xml_snapshots/snapshot_" + timestamp + ".xml");
+
 
         try (BufferedWriter writer = Files.newBufferedWriter(filePath)) {
             writer.write(xmlContent);
-            System.out.println("Saved XML snapshot to: " + filePath.toAbsolutePath());
+            Log.info("Saved XML snapshot to: " + filePath.toAbsolutePath());
 
             String xpathFilename = XML_OUTPUT_DIR + "/xpaths_" + timestamp + ".txt";
             Path xpathFilePath = Paths.get(xpathFilename);
             try (BufferedWriter xpathWriter = Files.newBufferedWriter(xpathFilePath)) {
                 xpathWriter.write("All XPaths found in XML (" + xpaths.size() + " total):\n");
                 xpathWriter.write(String.join("\n", xpaths));
-                System.out.println("Saved XPaths to: " + xpathFilePath.toAbsolutePath());
+                Log.info("Saved XPaths to: " + xpathFilePath.toAbsolutePath());
             }
+        }
+    }
+
+    public void clearXmlSnapshotsDirectory() {
+        try {
+            Files.walk(Paths.get(XML_OUTPUT_DIR))
+                    .filter(Files::isRegularFile)
+                    .forEach(path -> {
+                        try {
+                            Files.delete(path);
+                        } catch (IOException e) {
+                            System.err.println("Failed to delete file: " + path);
+                        }
+                    });
+            Log.info("Cleared xml_snapshots directory.");
+        } catch (IOException e) {
+            System.err.println("Failed to clear xml_snapshots directory:");
+            e.printStackTrace();
         }
     }
 }
