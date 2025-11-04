@@ -6,7 +6,7 @@
 
     <groupId>com.fawry</groupId>
     <artifactId>self-healing-lib</artifactId>
-    <version>1.3.0</version>
+    <version>1.3.1</version>
     <packaging>jar</packaging>
 
     <name>self-healing-lib</name>
@@ -115,13 +115,15 @@
         </plugins>
     </build>
 
-    <!-- ✅ Add this block before </project> -->
+    <!-- ✅ GitLab Maven Registry </project> -->
     <distributionManagement>
         <repository>
-            <id>github</id>
-            <name>GitHub Packages</name>
-            <url>https://maven.pkg.github.com/MuhammadMoustafa1/self-healing-lib</url>
+            <id>gitlab</id>
+            <name>GitLab Maven Registry</name>
+            <url>https://gitlab.fawry.io/api/v4/projects/1548/packages/maven</url>
         </repository>
     </distributionManagement>
+
+
 
 </project>

@@ -128,7 +128,6 @@ public class AIIntegrationService {
     /**
      * Create prompt for the AI with damaged XPaths and XML snapshot.
      */
-
     private String createAnalysisPrompt(List<String> damagedLocators, String xmlSnapshot) {
         boolean hasIOS = damagedLocators.stream().anyMatch(l ->
                 l.contains("XCUIElementType") || l.contains("name") || l.contains("label"));
@@ -143,29 +142,29 @@ public class AIIntegrationService {
             platform = "iOS";
             attributeHint = "@name, @label, @value";
             platformExamples = """
-                    Input:
-                    //XCUIElementTypeButton[@name='Login']
-                    Output:
-                    //XCUIElementTypeButton[contains(@name,'Login')]
-                    """;
+                Input:
+                //XCUIElementTypeButton[@name='Login']
+                Output:
+                //XCUIElementTypeButton[contains(@name,'Login')]
+                """;
         } else if (hasAndroid && !hasIOS) {
             platform = "Android";
             attributeHint = "@resource-id, @content-desc, @text";
             platformExamples = """
-                    Input:
-                    By.id("com.example:id/loginBtn")
-                    Output:
-                    //android.widget.Button[contains(@resource-id,'loginBtn')]
-                    """;
+                Input:
+                By.id("com.example:id/loginBtn")
+                Output:
+                //android.widget.Button[contains(@resource-id,'loginBtn')]
+                """;
         } else {
             platform = "Android and iOS";
             attributeHint = "Android: @resource-id, @content-desc, @text | iOS: @name, @label, @value";
             platformExamples = """
-                    Input:
-                    //android.widget.TextView[@text='Login'] | //XCUIElementTypeStaticText[@name='Login']
-                    Output:
-                    //android.widget.TextView[contains(@text,'Login')] | //XCUIElementTypeStaticText[contains(@name,'Login')]
-                    """;
+                Input:
+                //android.widget.TextView[@text='Login'] | //XCUIElementTypeStaticText[@name='Login']
+                Output:
+                //android.widget.TextView[contains(@text,'Login')] | //XCUIElementTypeStaticText[contains(@name,'Login')]
+                """;
         }
 
         StringBuilder listBuilder = new StringBuilder();
@@ -173,27 +172,118 @@ public class AIIntegrationService {
             listBuilder.append(i + 1).append(". ").append(damagedLocators.get(i)).append("\n");
         }
 
+        String rules = """
+            - For each damaged locator, find the closest match in the XML snapshot.
+            - Generate corrected locator(s) using exact or flexible attribute matches (use contains(), starts-with(), or normalize-space() if needed).
+            - Prefer attributes based on platform:
+              * iOS → @name, @label, @value
+              * Android → @resource-id, @content-desc, @text
+            - Preserve relationships (sibling, parent, ancestor) if present.
+            - Output ONLY the corrected locator(s), one per line, no explanations.
+            - Handle numbers in attribute values and node names correctly.
+            - Be case-insensitive when matching attribute values and node names.
+            - Support mixed Android and iOS locators in the same input.
+            - Support locators like //input[@data-qa='email'] or other custom attributes.
+            - If a locator contains a word in the middle, you may remove it if needed to find a match.
+            - You may change letters at the start or in the middle of attribute values to find the closest match.
+            - If a locator contains an index (e.g., [2]), keep the index unchanged in the output.
+            - Normalize spaces, tabs, or newlines in attributes before matching.
+            - If multiple elements match closely, return up to 3 best suggestions (one per line).
+            - If the tag name changes slightly (e.g., Button → TextView), still return the closest valid locator.
+            """;
+
+        String learningHint = String.format("""
+            MODEL LEARNING CONTEXT:
+            - You are analyzing damaged locators for platform: %s.
+            - Learn from the XML snapshot structure below: detect how attributes are used in this app (naming conventions, casing, id patterns, etc.).
+            - Use this snapshot as a reference to adapt and correct locators intelligently.
+            - Ensure the final suggestions align with the current app’s platform structure.
+            """, platform);
+
         return String.format(
-                "ROLE: You are an automation test assistant specializing in mobile app testing.\n" +
+                "ROLE: You are an advanced automation test assistant specializing in self-healing mobile locators.\n" +
                         "PLATFORM: %s\n" +
+                        "%s\n" +
                         "TASK: Given a list of damaged locators (XPath, By.id, sibling axes, name, etc.) and the current XML snapshot, search inside the XML and return the most similar/corrected locator(s).\n\n" +
                         "INPUT:\n" +
                         "1. Damaged Locators:\n%s\n\n" +
                         "2. Current XML Snapshot:\n'''\n%s\n'''\n\n" +
-                        "RULES:\n" +
-                        "- For each damaged locator, find the closest match in the XML.\n" +
-                        "- Generate corrected locator(s) using exact or flexible attribute matches (use contains(), starts-with(), normalize-space() if needed).\n" +
-                        "- For iOS, prefer @name, @label, @value.\n" +
-                        "- For Android, prefer @resource-id, @content-desc, @text.\n" +
-                        "- Preserve relationships (sibling, parent, ancestor) if present.\n" +
-                        "- Output ONLY the corrected locator(s), one per line, no explanations.\n" +
+                        "RULES:\n%s\n" +
                         "EXAMPLE:\n%s",
                 platform,
+                learningHint,
                 listBuilder.toString().trim(),
                 xmlSnapshot,
+                rules,
                 platformExamples
         );
     }
+
+//    private String createAnalysisPrompt(List<String> damagedLocators, String xmlSnapshot) {
+//        boolean hasIOS = damagedLocators.stream().anyMatch(l ->
+//                l.contains("XCUIElementType") || l.contains("name") || l.contains("label"));
+//        boolean hasAndroid = damagedLocators.stream().anyMatch(l ->
+//                l.contains("android.widget") || l.contains("resource-id") || l.contains("@text") || l.contains("By.id"));
+//
+//        String platform;
+//        String attributeHint;
+//        String platformExamples;
+//
+//        if (hasIOS && !hasAndroid) {
+//            platform = "iOS";
+//            attributeHint = "@name, @label, @value";
+//            platformExamples = """
+//                    Input:
+//                    //XCUIElementTypeButton[@name='Login']
+//                    Output:
+//                    //XCUIElementTypeButton[contains(@name,'Login')]
+//                    """;
+//        } else if (hasAndroid && !hasIOS) {
+//            platform = "Android";
+//            attributeHint = "@resource-id, @content-desc, @text";
+//            platformExamples = """
+//                    Input:
+//                    By.id("com.example:id/loginBtn")
+//                    Output:
+//                    //android.widget.Button[contains(@resource-id,'loginBtn')]
+//                    """;
+//        } else {
+//            platform = "Android and iOS";
+//            attributeHint = "Android: @resource-id, @content-desc, @text | iOS: @name, @label, @value";
+//            platformExamples = """
+//                    Input:
+//                    //android.widget.TextView[@text='Login'] | //XCUIElementTypeStaticText[@name='Login']
+//                    Output:
+//                    //android.widget.TextView[contains(@text,'Login')] | //XCUIElementTypeStaticText[contains(@name,'Login')]
+//                    """;
+//        }
+//
+//        StringBuilder listBuilder = new StringBuilder();
+//        for (int i = 0; i < damagedLocators.size(); i++) {
+//            listBuilder.append(i + 1).append(". ").append(damagedLocators.get(i)).append("\n");
+//        }
+//
+//        return String.format(
+//                "ROLE: You are an automation test assistant specializing in mobile app testing.\n" +
+//                        "PLATFORM: %s\n" +
+//                        "TASK: Given a list of damaged locators (XPath, By.id, sibling axes, name, etc.) and the current XML snapshot, search inside the XML and return the most similar/corrected locator(s).\n\n" +
+//                        "INPUT:\n" +
+//                        "1. Damaged Locators:\n%s\n\n" +
+//                        "2. Current XML Snapshot:\n'''\n%s\n'''\n\n" +
+//                        "RULES:\n" +
+//                        "- For each damaged locator, find the closest match in the XML.\n" +
+//                        "- Generate corrected locator(s) using exact or flexible attribute matches (use contains(), starts-with(), normalize-space() if needed).\n" +
+//                        "- For iOS, prefer @name, @label, @value.\n" +
+//                        "- For Android, prefer @resource-id, @content-desc, @text.\n" +
+//                        "- Preserve relationships (sibling, parent, ancestor) if present.\n" +
+//                        "- Output ONLY the corrected locator(s), one per line, no explanations.\n" +
+//                        "EXAMPLE:\n%s",
+//                platform,
+//                listBuilder.toString().trim(),
+//                xmlSnapshot,
+//                platformExamples
+//        );
+//    }
 
     public List<String> extractXPathFromAIResponse(String response) {
         String cleanedResponse = response.replaceAll("^```[a-zA-Z]*", "")
