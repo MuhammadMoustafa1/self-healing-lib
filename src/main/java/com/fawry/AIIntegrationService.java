@@ -45,6 +45,8 @@ public class AIIntegrationService {
             String xmlSnapshotContent = readFileContent(xmlSnapshotPath);
             if (xmlSnapshotContent == null) xmlSnapshotContent = "";
 
+            Log.info("XML Snapshot content sent to AI model:\n" + xmlSnapshotContent);
+
             String prompt = createAnalysisPrompt(damagedXPaths, xmlSnapshotContent);
             Log.info("Sending request to AI model with prompt:\n" + prompt);
 
@@ -64,6 +66,31 @@ public class AIIntegrationService {
             return null;
         }
     }
+
+//    public List<String> analyzeAndGenerateXPaths(List<String> damagedXPaths, String xmlSnapshotPath) {
+//        try {
+//            String xmlSnapshotContent = readFileContent(xmlSnapshotPath);
+//            if (xmlSnapshotContent == null) xmlSnapshotContent = "";
+//
+//            String prompt = createAnalysisPrompt(damagedXPaths, xmlSnapshotContent);
+//            Log.info("Sending request to AI model with prompt:\n" + prompt);
+//
+//            String aiResponse = callQwenMoeAPI(prompt);
+//            List<String> xpaths = extractXPathFromAIResponse(aiResponse);
+//
+//            if (xpaths == null || xpaths.isEmpty()) {
+//                Log.info("Failed to extract valid XPaths from AI response");
+//                return null;
+//            }
+//
+//            Log.info("Generated XPaths from AI analysis: " + xpaths);
+//            return xpaths;
+//
+//        } catch (Exception e) {
+//            Log.error("AI analysis failed", e);
+//            return null;
+//        }
+//    }
 
 
     private String callQwenMoeAPI(String prompt) throws IOException {
