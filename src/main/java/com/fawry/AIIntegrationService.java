@@ -272,7 +272,7 @@ public class AIIntegrationService {
      */
     public List<String> autoAnalyzeAndFix(List<String> damagedXPaths) {
         String timestamp = LocalDateTime.now().format(FILE_TIMESTAMP_FORMAT);
-        String xmlSnapshotPath = "./snapshots/snapshot_" + timestamp + ".xml";
+        String xmlSnapshotPath = "xml_snapshots/snapshot_" + timestamp + ".xml";
         return analyzeAndGenerateXPaths(damagedXPaths, xmlSnapshotPath);
     }
 
