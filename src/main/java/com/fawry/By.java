@@ -4,7 +4,10 @@ import com.fawry.utilities.Log;
 import io.appium.java_client.AppiumDriver;
 import org.openqa.selenium.*;
 import org.openqa.selenium.NoSuchElementException;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import org.openqa.selenium.support.ui.ExpectedConditions;
 
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -18,6 +21,12 @@ public class By extends org.openqa.selenium.By {
 
     // Cache for healed locators
     private static final Map<String, org.openqa.selenium.By> healedCache = new ConcurrentHashMap<>();
+    
+    // Default wait timeout (in seconds)
+    private static final int DEFAULT_WAIT_TIMEOUT = 10;
+    
+    // Wait time for scrolling/swiping to complete (in milliseconds)
+    private static final int SCROLL_WAIT_TIME_MS = 500;
 
     // ====== Constructor & Driver Setter ======
     private By(org.openqa.selenium.By by) {
@@ -42,20 +51,35 @@ public class By extends org.openqa.selenium.By {
     @Override
     public WebElement findElement(SearchContext context) {
         String locatorKey = originalBy.toString();
+        
+        // First, wait for scrolling/swiping to complete
+        waitForScrollOrSwipeToComplete();
+        
         try {
+            // Check if we have a cached healed locator
             if (healedCache.containsKey(locatorKey)) {
-                return healedCache.get(locatorKey).findElement(context);
+                org.openqa.selenium.By cachedBy = healedCache.get(locatorKey);
+                return waitForElementVisibility(cachedBy, context);
             }
-            return originalBy.findElement(context);
+            
+            // Try with original locator, wait for visibility first
+            return waitForElementVisibility(originalBy, context);
+            
         } catch (NoSuchElementException | TimeoutException | InvalidElementStateException e) {
             Log.info("⚠️ Element issue detected for locator: " + locatorKey);
             Log.info("🧠 Triggering healing process...");
+            
+            // Wait for scrolling/swiping before healing
+            waitForScrollOrSwipeToComplete();
+            
             org.openqa.selenium.By healedBy = healLocator(locatorKey);
 
             if (healedBy != null) {
                 healedCache.put(locatorKey, healedBy);
                 Log.info("✅ Healing successful. Cached healed locator: " + healedBy);
-                return healedBy.findElement(context);
+                
+                // Wait for healed element to be visible
+                return waitForElementVisibility(healedBy, context);
             }
 
             throw new NoSuchElementException("❌ Failed to heal locator: " + locatorKey, e);
@@ -65,26 +89,159 @@ public class By extends org.openqa.selenium.By {
     @Override
     public List<WebElement> findElements(SearchContext context) {
         String locatorKey = originalBy.toString();
+        
+        // First, wait for scrolling/swiping to complete
+        waitForScrollOrSwipeToComplete();
+        
         try {
+            // Check if we have a cached healed locator
             if (healedCache.containsKey(locatorKey)) {
-                return healedCache.get(locatorKey).findElements(context);
+                org.openqa.selenium.By cachedBy = healedCache.get(locatorKey);
+                return waitForElementsVisibility(cachedBy, context);
             }
-            return originalBy.findElements(context);
+            
+            // Try with original locator, wait for visibility first
+            return waitForElementsVisibility(originalBy, context);
+            
         } catch (NoSuchElementException | TimeoutException | InvalidElementStateException e) {
             Log.info("⚠️ Elements issue detected for locator: " + locatorKey);
             Log.info("🧠 Triggering healing process...");
+            
+            // Wait for scrolling/swiping before healing
+            waitForScrollOrSwipeToComplete();
+            
             org.openqa.selenium.By healedBy = healLocator(locatorKey);
 
             if (healedBy != null) {
                 healedCache.put(locatorKey, healedBy);
                 Log.info("✅ Healing successful for elements. Cached healed locator: " + healedBy);
-                return healedBy.findElements(context);
+                
+                // Wait for healed elements to be visible
+                return waitForElementsVisibility(healedBy, context);
             }
 
             throw new NoSuchElementException("❌ Failed to heal elements for locator: " + locatorKey, e);
         }
     }
 
+    // ====== Wait Utilities ======
+    
+    /**
+     * Waits for scrolling or swiping animations to complete by checking if page source stabilizes.
+     */
+    private void waitForScrollOrSwipeToComplete() {
+        if (driver == null) {
+            return;
+        }
+        
+        try {
+            String previousPageSource = driver.getPageSource();
+            Thread.sleep(SCROLL_WAIT_TIME_MS);
+            
+            int maxAttempts = 5;
+            int attempt = 0;
+            while (attempt < maxAttempts) {
+                String currentPageSource = driver.getPageSource();
+                if (currentPageSource.equals(previousPageSource)) {
+                    // Page source is stable, scrolling/swiping is complete
+                    Log.info("✅ Scrolling/swiping completed - page source is stable");
+                    return;
+                }
+                previousPageSource = currentPageSource;
+                Thread.sleep(SCROLL_WAIT_TIME_MS);
+                attempt++;
+            }
+            Log.info("⚠️ Scrolling/swiping may still be in progress, proceeding anyway");
+        } catch (Exception e) {
+            Log.info("⚠️ Error checking scroll/swipe completion: " + e.getMessage());
+            // Continue anyway - don't block execution
+        }
+    }
+    
+    /**
+     * Waits for element to be visible before returning it.
+     */
+    private WebElement waitForElementVisibility(org.openqa.selenium.By by, SearchContext context) {
+        // If context is WebDriver/AppiumDriver, use WebDriverWait
+        if (context instanceof WebDriver) {
+            try {
+                WebDriverWait wait = new WebDriverWait((WebDriver) context, Duration.ofSeconds(DEFAULT_WAIT_TIMEOUT));
+                return wait.until(ExpectedConditions.presenceOfElementLocated(by));
+            } catch (TimeoutException e) {
+                // If wait times out, try direct findElement as fallback
+                Log.info("⚠️ Wait for visibility timed out, trying direct findElement");
+                return by.findElement(context);
+            }
+        }
+        
+        // If context is WebElement (nested search), try with retries
+        if (context instanceof WebElement) {
+            int maxRetries = 3;
+            for (int i = 0; i < maxRetries; i++) {
+                try {
+                    WebElement element = by.findElement(context);
+                    // Check if element is displayed
+                    if (element.isDisplayed()) {
+                        return element;
+                    }
+                } catch (NoSuchElementException e) {
+                    if (i < maxRetries - 1) {
+                        try {
+                            Thread.sleep(500); // Wait 500ms before retry
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                        }
+                        continue;
+                    }
+                    throw e;
+                }
+            }
+        }
+        
+        // Fallback: direct findElement
+        return by.findElement(context);
+    }
+    
+    /**
+     * Waits for elements to be visible before returning them.
+     */
+    private List<WebElement> waitForElementsVisibility(org.openqa.selenium.By by, SearchContext context) {
+        // If context is WebDriver/AppiumDriver, use WebDriverWait
+        if (context instanceof WebDriver) {
+            try {
+                WebDriverWait wait = new WebDriverWait((WebDriver) context, Duration.ofSeconds(DEFAULT_WAIT_TIMEOUT));
+                wait.until(ExpectedConditions.presenceOfElementLocated(by));
+                // After waiting for at least one element, return all found elements
+                return by.findElements(context);
+            } catch (TimeoutException e) {
+                // If wait times out, try direct findElements as fallback
+                Log.info("⚠️ Wait for visibility timed out, trying direct findElements");
+                return by.findElements(context);
+            }
+        }
+        
+        // If context is WebElement (nested search), try with retries
+        if (context instanceof WebElement) {
+            int maxRetries = 3;
+            for (int i = 0; i < maxRetries; i++) {
+                List<WebElement> elements = by.findElements(context);
+                if (!elements.isEmpty()) {
+                    return elements;
+                }
+                if (i < maxRetries - 1) {
+                    try {
+                        Thread.sleep(500); // Wait 500ms before retry
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+        }
+        
+        // Fallback: direct findElements
+        return by.findElements(context);
+    }
+    
     // ====== Healing Logic ======
     private org.openqa.selenium.By healLocator(String rawLocator) {
         try {
